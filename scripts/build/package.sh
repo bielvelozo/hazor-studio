@@ -313,6 +313,9 @@ package_windows_zip() {
             -maxdepth 1 -type f -name 'libexiv2*.dll' -exec cp -f {} "$DIST_DIR/" \; 2>/dev/null || true
         find "$DIST_DIR" -maxdepth 1 -name 'libexiv2*.dll' -print -quit | grep -q . \
             || die "RawEngine was built but its exiv2 DLL was not found under $RAWENGINE_DEPS_DIR/exiv2"
+        # copy_runtime_assets() below skips a missing rtdata silently, which
+        # would ship an engine that cannot load a single camera profile.
+        require_dir "$RAWENGINE_DEPS_DIR/rtdata" "RawEngine rtdata"
         # Lens Corrections needs lensfun's camera/lens database at runtime.
         # This layout is load-bearing: AppPaths::lensfunDatabaseDir() looks for
         # share/lensfun/version_1 beside the executable and hands it to

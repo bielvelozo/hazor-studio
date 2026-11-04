@@ -897,9 +897,57 @@ prepare_rawengine_lensfun() {
 # read at runtime, identical on every platform, and it is vendored alongside
 # the engine source rather than published as a release of its own. Cross
 # targets therefore link the native tree's copy instead of refetching it.
+#
+# Without a native tree (a CI runner, a fresh clone) there is nothing to link,
+# and package.sh would stop on the missing rtdata. That case assembles the same
+# data once from the pinned RawTherapee commit the engine was vendored from,
+# into common/ (platform-neutral, like the ONNX models), and links it.
 link_shared_rawengine_rtdata() {
     [[ -e "$RAWENGINE_DEPS_DIR/rtdata" ]] && return 0
-    link_directory "$ROOT_DIR/3rdparty/rawengine/rtdata" "$RAWENGINE_DEPS_DIR/rtdata" || true
+    if [[ -d "$ROOT_DIR/3rdparty/rawengine/rtdata" ]]; then
+        link_directory "$ROOT_DIR/3rdparty/rawengine/rtdata" "$RAWENGINE_DEPS_DIR/rtdata"
+        return 0
+    fi
+    prepare_shared_rawengine_rtdata
+    link_directory "$HAZOR_COMMON_ROOT/rawengine/rtdata/${HAZOR_RAWTHERAPEE_COMMIT:0:12}" \
+        "$RAWENGINE_DEPS_DIR/rtdata"
+}
+
+# Mirrors what RawTherapee's own rtdata/CMakeLists.txt installs into its data
+# directory, restricted to what rtengine reads (src/raw/RawEngine.hpp lists
+# it): iccprofiles/, dcpprofiles/, the *.pp3 tree under profiles/, and the
+# three camera-constant files. Icons, themes, languages and sounds are GTK GUI
+# data and stay out. camconst.json comes from src/rawengine/rtengine — the copy
+# the engine was vendored with — exactly as upstream installs it from rtengine/.
+prepare_shared_rawengine_rtdata() {
+    local destination="$HAZOR_COMMON_ROOT/rawengine/rtdata/${HAZOR_RAWTHERAPEE_COMMIT:0:12}"
+    [[ -f "$destination/.hazor-provenance" ]] && return 0
+    local source
+    source="$(rawengine_source_dir "rawtherapee-$HAZOR_RAWTHERAPEE_COMMIT")"
+    checkout_pinned_source "$HAZOR_RAWTHERAPEE_GIT_URL" "$HAZOR_RAWTHERAPEE_COMMIT" "$source"
+    require_dir "$source/rtdata/iccprofiles" "RawTherapee rtdata/iccprofiles"
+    require_dir "$source/rtdata/dcpprofiles" "RawTherapee rtdata/dcpprofiles"
+    require_dir "$source/rtdata/profiles" "RawTherapee rtdata/profiles"
+
+    local parent stage
+    parent="$(dirname "$destination")"
+    mkdir -p "$parent"
+    [[ -e "$destination" ]] && safe_remove_tree "$destination" "$THIRD_PARTY_DIR"
+    stage="$(mktemp -d -p "$parent")"
+    # mktemp creates 0700, and packaging copies with -a: without this the
+    # shipped rtdata directory would be unreadable to everyone but its owner.
+    chmod 755 "$stage"
+    cp -a "$source/rtdata/iccprofiles" "$source/rtdata/dcpprofiles" "$stage/"
+    cp -a "$source/rtdata/cammatrices.json" "$source/rtdata/dcraw.json" "$stage/"
+    cp -a "$ROOT_DIR/src/rawengine/rtengine/camconst.json" "$stage/"
+    ( cd "$source/rtdata" && find profiles -type f -name '*.pp3' -print0 \
+        | xargs -0 cp --parents -t "$stage" )
+    find "$stage/profiles" -type f -name '*.pp3' -print -quit | grep -q . \
+        || die "no processing profiles found in RawTherapee rtdata/profiles"
+    write_provenance "$stage" "RawEngine rtdata" "RawTherapee $HAZOR_RAWTHERAPEE_COMMIT" \
+        "$HAZOR_RAWTHERAPEE_GIT_URL@$HAZOR_RAWTHERAPEE_COMMIT (rtdata subset)"
+    mv -- "$stage" "$destination"
+    log "RawEngine rtdata assembled from RawTherapee ${HAZOR_RAWTHERAPEE_COMMIT:0:12}"
 }
 
 prepare_rawengine() {

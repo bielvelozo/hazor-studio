@@ -440,6 +440,22 @@ Every other target builds all nine from those same pinned sources —
 `3rdparty/targets/<target>/rawengine/<lib>/{include,lib}`. The Flatpak builds
 them a third time, inside its own sandbox, for the same ABI reason.
 
+`rtdata` — the engine's runtime data (`iccprofiles/`, `dcpprofiles/`, the
+`profiles/` tree of `.pp3` files, `camconst.json`, `cammatrices.json`,
+`dcraw.json`) — is not a library and is the same on every platform. A cross
+target links the native tree's `3rdparty/rawengine/rtdata` when one exists.
+Without it (a CI runner, a fresh clone) `prepare_shared_rawengine_rtdata()`
+assembles it once into `3rdparty/common/rawengine/rtdata/<commit>/` from
+RawTherapee commit `b2ee504c47e5e6d5e054395aa12bf1fe43bd1c3c`
+(`HAZOR_RAWTHERAPEE_COMMIT` in [`versions.sh`](../scripts/build/versions.sh)) —
+the one `src/rawengine/rtengine` was vendored from: its `camconst.json` is
+byte-identical, and so is every rtengine source Hazor did not modify. It copies
+what RawTherapee's own `rtdata/CMakeLists.txt` installs into its data directory,
+minus the GTK GUI data (icons, themes, languages, sounds), and takes
+`camconst.json` from `src/rawengine/rtengine/`, as upstream installs it from
+`rtengine/`. The Windows ZIP refuses to package a RAW engine build without
+`rtdata`, rather than shipping an engine that cannot load a camera profile.
+
 #### lensfun and glib-2.0
 
 RAW development is a shipped feature and Lens Corrections is part of it, so

@@ -144,6 +144,15 @@ readonly HAZOR_RAWENGINE_GLIB_SHA256="05c2031f9bdf6b5aba7a06ca84f0b4aced28b19bf1
 
 readonly HAZOR_MESON_VERSION="1.6.1"
 
+# rtdata — the RAW engine's runtime data (ICC/DCP profiles, processing
+# profiles, camera matrices). src/rawengine/rtengine was vendored from this
+# RawTherapee dev commit: its camconst.json is byte-identical to the one there,
+# and every rtengine source Hazor did not modify matches it too. A machine
+# without the pre-existing native 3rdparty/rawengine/rtdata (a CI runner, a
+# fresh clone) assembles the same data from this commit instead.
+readonly HAZOR_RAWTHERAPEE_COMMIT="b2ee504c47e5e6d5e054395aa12bf1fe43bd1c3c"
+readonly HAZOR_RAWTHERAPEE_GIT_URL="https://github.com/RawTherapee/RawTherapee.git"
+
 readonly HAZOR_MATERIAL_ICONS_ARCHIVE="material-design-icons-${HAZOR_MATERIAL_ICONS_VERSION}.zip"
 readonly HAZOR_MATERIAL_ICONS_URL="https://github.com/google/material-design-icons/releases/download/${HAZOR_MATERIAL_ICONS_VERSION}/${HAZOR_MATERIAL_ICONS_ARCHIVE}"
 readonly HAZOR_MATERIAL_ICONS_SHA256="722e3b09121b82a3746f3da2ecd3a2db8d7d24153b8433324315695a45f06a90"
