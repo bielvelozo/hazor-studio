@@ -1,9 +1,9 @@
 # Building Hazor Studio
 
 This document covers native and local cross-builds of Hazor Studio from a Linux
-host. The existing GitHub workflows remain release references, while local
-builds share pinned component versions through
-[`scripts/build.sh`](../scripts/build.sh).
+host. Local builds and the Windows release workflow share pinned component
+versions through [`scripts/build.sh`](../scripts/build.sh); the Linux AppImage
+workflow remains a release reference.
 
 ## Requirements
 
@@ -92,13 +92,16 @@ AppImages on a host/container with the oldest glibc that the release intends to
 support; the existing reference workflow uses Ubuntu 22.04. Flatpak instead
 inherits the declared KDE 6.8 runtime ABI.
 
-The Windows workflow uses the MSVC x64 ABI (`win64_msvc2022_64`, VC14/VC15
-OpenCV, and a vcpkg MSVC zlib). Those C++ binaries are not linked into the local
-MinGW cross-build. The local x64 target uses official `win64_mingw` Qt and builds
-OpenCV/zlib from the same pinned source versions. RealESRGAN and models are
-runtime data and reuse the workflow archives. The ONNX Runtime DLL is staged for
-provenance, but linking stays disabled until its GNU import-library/C ABI path is
-validated.
+Windows is built with MinGW-w64 only, locally and in CI alike: the Windows
+workflow runs `./scripts/build.sh --target windows-x86_64` on an Ubuntu 22.04
+runner (see [Continuous integration](#continuous-integration)). The target uses
+official `win64_mingw` Qt and builds OpenCV/zlib from the pinned source
+versions. ONNX Runtime links through a GNU import library generated from the
+release DLL's own export table (`prepare_onnxruntime()`), so the AI feature set
+matches Linux. The earlier MSVC workflow could not build the RAW engine —
+RawTherapee's `rtengine` is only supported on Windows through MinGW upstream,
+and its MSVC port (`src/rawengine/PROVENANCE.md`) was never attempted — so it
+shipped without RAW support; that is why it was replaced rather than extended.
 
 ### Central build interface
 
@@ -345,7 +348,8 @@ flag only rewrites `__FILE__`:
 
 The exact versions and download sources used by CI are listed below. The local
 manifest reuses them where compiler ABIs match and uses the same source version
-otherwise. The workflows themselves are unchanged.
+otherwise. The Windows workflow consumes the manifest directly; the Linux
+AppImage workflow still pins its own copies.
 
 ### Qt 6.8.3
 
@@ -356,8 +360,7 @@ Installed via [`aqtinstall`](https://github.com/miurahr/aqtinstall) (the
 | OS | Host / Arch |
 |----|-------------|
 | Linux | `linux` / `linux_gcc_64` → `Qt/6.8.3/gcc_64` |
-| Windows workflow | `windows` / `win64_msvc2022_64` |
-| Windows local cross-target | `windows` / `win64_mingw` + Linux Qt host tools |
+| Windows (local and CI) | `windows` / `win64_mingw` + Linux Qt host tools |
 | macOS cross-target | `mac` / `clang_64` + Linux Qt host tools; user-supplied OSXCross SDK |
 
 Qt 6.8's supported Windows desktop architecture is x86_64 and there is no
@@ -380,17 +383,17 @@ Released by Microsoft on the [ONNX Runtime releases page](https://github.com/mic
 | OS | Source |
 |----|--------|
 | Linux | System package `libopencv-dev` (apt), or [OpenCV 4.5.4 release](https://github.com/opencv/opencv/releases/tag/4.5.4) |
-| Windows | [`opencv-4.5.4-vc14_vc15.exe`](https://github.com/opencv/opencv/releases/download/4.5.4/opencv-4.5.4-vc14_vc15.exe) (self-extracting) |
+| Windows | Built from source by `prepare_opencv()` (MinGW-w64) |
 
 Strict local builds compile commit `4223495e6cd67011f86b8ecd9be1fa105018f3b1`
-for each target. The precompiled Windows archive stays CI/MSVC-only.
+for each target.
 
 ### zlib
 
 | OS | Source |
 |----|--------|
 | Linux | System package `zlib1g-dev` (apt) |
-| Windows | vcpkg: `vcpkg install zlib:x64-windows-static-md` |
+| Windows | Built from source by `prepare_zlib()` (MinGW-w64) |
 
 Strict local builds compile zlib 1.3.2 commit
 `da607da739fa6047df13e66a2af6b8bec7c2a498` statically per target.
@@ -658,6 +661,23 @@ CI build definitions live in [`.github/workflows/`](../.github/workflows/):
 - `linux-appimage-build.yml` — Linux AppImage packaging
 - `windows-build.yml` — Windows build
 
-They remain references for versions and release conventions. Local build
-metadata is centralized in `scripts/build/versions.sh`; these workflows were not
-modified by the cross-build implementation.
+`windows-build.yml` is a thin wrapper around the build interface: it
+installs the host packages listed under [Windows cross-toolchain](#windows-cross-toolchain),
+runs `./scripts/build.sh --target windows-x86_64 --config Release --prepare
+--verify-only --no-verify` to provision dependencies, then
+`./scripts/build.sh --target windows-x86_64 --config Release --package zip`,
+and uploads `artifacts/windows-x86_64/HazorStudio-Windows-x64-v<version>.zip`.
+Its last step fails the run if the package came out without ONNX Runtime, the
+RAW engine, `rtdata` or the lensfun database, since CMake only warns when an
+optional feature's dependencies are missing.
+
+The cross toolchain is cached on a key derived from its pinned versions and
+`prepare_mingw_toolchain()` alone, so the hour-long GCC bootstrap only reruns
+when the toolchain itself changes. Prepared dependencies are cached on the exact
+hash of the build scripts and are never partially restored: several RawEngine
+prefixes carry no version in their path, so an older set would otherwise be
+reused silently after a version bump. Verified downloads and ccache are
+restored from the most recent run.
+
+`linux-appimage-build.yml` remains a reference for versions and release
+conventions and was not moved onto the build interface yet.

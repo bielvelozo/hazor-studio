@@ -26,7 +26,7 @@ and an integrated AI layer.
 | AI inference | ONNX Runtime 1.26 (**optional**, `ENABLE_ONNXRUNTIME`) |
 | Build | CMake ≥ 3.16, `AUTOMOC` + `AUTORCC` |
 | License | GPL-3.0 — see [`LICENSE`](LICENSE) |
-| Platforms | Linux (primary, AppImage) and Windows (MSVC 2022) |
+| Platforms | Linux (primary, AppImage) and Windows (MinGW-w64 GCC 13, cross-built from Linux) |
 
 Start with [`README.md`](README.md) for the feature set and
 [`docs/BUILD.md`](docs/BUILD.md) for dependencies.
